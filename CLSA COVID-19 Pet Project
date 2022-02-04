@@ -1,0 +1,996 @@
+#######################################################################################
+# CLSA: COVID-19 Pet Analysis Complete
+# Author: Ryan Falck
+# Last edited: 12-16-2021
+#######################################################################################
+
+#_______________________________#
+#1: Set-up and data management  #
+#_______________________________#
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(tidyverse,Hmisc, knitr,dplyr, pander, broom, haven, rms, nlme,lspline, lavaan, semTools, tableone, ggpubr, ggplot2, 
+               openxlsx, expss, aod, lsmeans, lme4, lmerTest, psych)
+
+setwd("C:/Users/falckr/Desktop/UBC-Postdoctoral Fellowship/CLSA - Covid Analyses ")
+COVID_Full<-read.xlsx("Full_COVID_Dataset_REVISED.xlsx")#Processed Baseline + Follow-up 1 + COVID Questionnaires
+
+
+###Create variables for changes in depression, anxiety, and mood disorders from BL to FU1 (Complete cases only)###
+
+#Depression
+COVID_Full$Depression_Change<- NA
+COVID_Full$Depression_Change[COVID_Full$Clin_Depression_0 == "Yes" & COVID_Full$Clin_Depression_1 == "Yes"] <- "Depressed at BL and FU1"
+COVID_Full$Depression_Change[COVID_Full$Clin_Depression_0 == "Yes" & COVID_Full$Clin_Depression_1 == "No"] <- "Depressed at BL"
+COVID_Full$Depression_Change[COVID_Full$Clin_Depression_0 == "No" & COVID_Full$Clin_Depression_1 == "Yes"] <- "Depressed at FU1"
+COVID_Full$Depression_Change[COVID_Full$Clin_Depression_0 == "No" & COVID_Full$Clin_Depression_1 == "No"] <- "No Depression"
+table(COVID_Full$Depression_Change)
+
+#Anxiety
+COVID_Full$Anxiety_Change<- NA
+COVID_Full$Anxiety_Change[COVID_Full$Anxiety_0 == "Yes" & COVID_Full$Anxiety_1 == "Yes"] <- "Anxiety at BL and FU1"
+COVID_Full$Anxiety_Change[COVID_Full$Anxiety_0 == "Yes" & COVID_Full$Anxiety_1 == "No"] <- "Anxiety at BL"
+COVID_Full$Anxiety_Change[COVID_Full$Anxiety_0 == "No" & COVID_Full$Anxiety_1 == "Yes"] <- "Anxiety at FU1"
+COVID_Full$Anxiety_Change[COVID_Full$Anxiety_0 == "No" & COVID_Full$Anxiety_1 == "No"] <- "No Anxiety"
+table(COVID_Full$Anxiety_Change)
+
+#Mood Disorders
+COVID_Full$Mood_Disord_Change<- NA
+COVID_Full$Mood_Disord_Change[COVID_Full$Mood_Disord_0 == "Yes" & COVID_Full$Mood_Disord_1 == "Yes"] <- "Mood Disorder No Change"
+COVID_Full$Mood_Disord_Change[COVID_Full$Mood_Disord_0 == "Yes" & COVID_Full$Mood_Disord_1 == "No"] <- "Mood Disorder at Baseline"
+COVID_Full$Mood_Disord_Change[COVID_Full$Mood_Disord_0 == "No" & COVID_Full$Mood_Disord_1 == "Yes"] <- "Mood Disorder at FU1"
+COVID_Full$Mood_Disord_Change[COVID_Full$Mood_Disord_0 == "No" & COVID_Full$Mood_Disord_1 == "No"] <- "No Mood Disorder"
+table(COVID_Full$Mood_Disord_Change)
+
+
+###Create variables for any anxiety, depression, or mood disorder at either BL or FU1###
+
+#Depression
+COVID_Full$Depression_Any<-NA
+COVID_Full$Depression_Any[COVID_Full$Depression_Change=="Depressed at BL" | 
+                            COVID_Full$Depression_Change=="Depressed at FU1" | 
+                            COVID_Full$Depression_Change=="Depressed at BL and FU1"]<-"Yes"
+COVID_Full$Depression_Any[COVID_Full$Depression_Change=="No Depression"]<-"No"
+table(COVID_Full$Depression_Any)
+prop.table(table(COVID_Full$Depression_Any))
+
+#Anxiety
+COVID_Full$Anxiety_Any<-NA
+COVID_Full$Anxiety_Any[COVID_Full$Anxiety_Change=="Anxiety at BL" | 
+                         COVID_Full$Anxiety_Change=="Anxiety at FU1" | 
+                         COVID_Full$Anxiety_Change=="Anxiety at BL and FU1"]<-"Yes"
+COVID_Full$Anxiety_Any[COVID_Full$Anxiety_Change=="No Anxiety"]<-"No"
+table(COVID_Full$Anxiety_Any)
+prop.table(table(COVID_Full$Anxiety_Any))
+
+#Mood Disorders
+COVID_Full$Mood_Disorders_Any<-NA
+COVID_Full$Mood_Disorders_Any[COVID_Full$Mood_Disord_Change=="Mood Disorder at Baseline" | 
+                                COVID_Full$Mood_Disord_Change=="Mood Disorder at FU1" | 
+                                COVID_Full$Mood_Disord_Change=="Mood Disorder No Change"]<-"Yes"
+COVID_Full$Mood_Disorders_Any[COVID_Full$Mood_Disord_Change=="No Mood Disorder"]<-"No"
+table(COVID_Full$Mood_Disorders_Any)
+prop.table(table(COVID_Full$Mood_Disorders_Any))
+
+
+
+#Complete Mental Health Disorder Status#
+COVID_Full$Mental_health<- NA
+COVID_Full$Mental_health[COVID_Full$Depression_Any=="Yes" & COVID_Full$Anxiety_Any=="No" & COVID_Full$Mood_Disorders_Any=="No"]<-"Depression Only"
+COVID_Full$Mental_health[COVID_Full$Depression_Any=="No" & COVID_Full$Anxiety_Any=="Yes" & COVID_Full$Mood_Disorders_Any=="No"]<-"Anxiety Only"
+COVID_Full$Mental_health[COVID_Full$Depression_Any=="No" & COVID_Full$Anxiety_Any=="No" & COVID_Full$Mood_Disorders_Any=="Yes"]<-"Mood Disorder Only"
+COVID_Full$Mental_health[COVID_Full$Depression_Any=="No" & COVID_Full$Anxiety_Any=="No" & COVID_Full$Mood_Disorders_Any=="No"]<-"None"
+COVID_Full$Mental_health[COVID_Full$Depression_Any=="Yes" & COVID_Full$Anxiety_Any=="Yes" & COVID_Full$Mood_Disorders_Any=="No"]<-"Depression + Anxiety"
+COVID_Full$Mental_health[COVID_Full$Depression_Any=="Yes" & COVID_Full$Anxiety_Any=="No" & COVID_Full$Mood_Disorders_Any=="Yes"]<-"Depression + Mood"
+COVID_Full$Mental_health[COVID_Full$Depression_Any=="No" & COVID_Full$Anxiety_Any=="Yes" & COVID_Full$Mood_Disorders_Any=="Yes"]<-"Anxiety + Mood"
+COVID_Full$Mental_health[COVID_Full$Depression_Any=="Yes" & COVID_Full$Anxiety_Any=="Yes" & COVID_Full$Mood_Disorders_Any=="Yes"]<-"Depression + Anxiety + Mood"
+
+#Complete Mental Health Disorder Status Short Form
+COVID_Full$Mental_health_1<- NA
+COVID_Full$Mental_health_1[COVID_Full$Depression_Any=="Yes" & COVID_Full$Anxiety_Any=="No" & COVID_Full$Mood_Disorders_Any=="No"]<-"Depression Only"
+COVID_Full$Mental_health_1[COVID_Full$Depression_Any=="No" & COVID_Full$Anxiety_Any=="Yes" & COVID_Full$Mood_Disorders_Any=="No"]<-"Anxiety Only"
+COVID_Full$Mental_health_1[COVID_Full$Depression_Any=="No" & COVID_Full$Anxiety_Any=="No" & COVID_Full$Mood_Disorders_Any=="Yes"]<-"Mood Disorder Only"
+COVID_Full$Mental_health_1[COVID_Full$Depression_Any=="No" & COVID_Full$Anxiety_Any=="No" & COVID_Full$Mood_Disorders_Any=="No"]<-"None"
+COVID_Full$Mental_health_1[COVID_Full$Depression_Any=="Yes" & COVID_Full$Anxiety_Any=="Yes" | 
+                             COVID_Full$Depression_Any=="Yes" & COVID_Full$Mood_Disorders_Any=="Yes" |
+                             COVID_Full$Anxiety_Any=="Yes" & COVID_Full$Mood_Disorders_Any=="Yes" |
+                             COVID_Full$Depression_Any=="Yes" & COVID_Full$Anxiety_Any=="Yes" & COVID_Full$Mood_Disorders_Any=="Yes"]<-"Multiple"
+
+#Multiple Mental Health Disorders Dummy Variable
+COVID_Full$Multiple_Disorders<-NA
+COVID_Full$Multiple_Disorders[COVID_Full$Mental_health_1=="Multiple"]<-"Multiple"
+COVID_Full$Multiple_Disorders[COVID_Full$Mental_health_1=="Depression Only" | COVID_Full$Mental_health_1=="Anxiety Only" |
+                                COVID_Full$Mental_health_1=="Mood Disorder Only"]<-"Single"
+COVID_Full$Multiple_Disorders[COVID_Full$Mental_health_1=="None"]<-"None"
+
+###Create Dummy Variables for Pet ownership###
+
+#Dummy variable for new, former, non, and continued pet ownership
+COVID_Full$Pet_Owner_Changes<-NA
+COVID_Full$Pet_Owner_Changes[COVID_Full$Pet_Owner_0=="Yes" & COVID_Full$Pet_Owner_1 == "Yes"]<-"Continued Owner"
+COVID_Full$Pet_Owner_Changes[COVID_Full$Pet_Owner_0=="No" & COVID_Full$Pet_Owner_1 == "Yes"]<-"New Owner"
+COVID_Full$Pet_Owner_Changes[COVID_Full$Pet_Owner_0=="No" & COVID_Full$Pet_Owner_1 == "No"]<-"No Pets"
+COVID_Full$Pet_Owner_Changes[COVID_Full$Pet_Owner_0=="Yes" & COVID_Full$Pet_Owner_1 == "No"]<-"Former Owner"
+COVID_Full$Pet_Owner_Changes<-relevel(factor(COVID_Full$Pet_Owner_Changes), ref = "No Pets")
+
+
+###Exclude people at baseline with dementia, SCI###
+COVID_Full_1<-subset(COVID_Full, SCI_0 == "No" & Dementia_0 == "No")
+
+###Exclude participants with missing data on anxiety, depression, or mood disorders baseline or FU1###
+COVID_Full_2<-subset(COVID_Full_1,!is.na(Anxiety_0) & !is.na(Mood_Disord_0) & !is.na(Clin_Depression_0),
+                     !is.na(Anxiety_1) & !is.na(Mood_Disord_1) & !is.na(Clin_Depression_1))
+
+###Exclude participants with missing data at Baseline, FU1 or COVID Questionnaire entry or exit (i.e., complete cases only)###
+COVID_Final<-subset(COVID_Full_2, !is.na(Age_1) & !is.na(Relationship_status_1) & !is.na(Sex_0) & !is.na(Education4_0) & 
+                      !is.na(Income_Level_1) & !is.na(Living_status_1) & !is.na(Alcohol_1) & !is.na(Smoking_Status_0) & !is.na(Chronic_Conditions_1_1) &
+                      !is.na(BMI_1) & !is.na(CESD_10_1) &!is.na(Pet_Owner_1)  &!is.na(CESD_10_1) & !is.na(CESD_10_Baseline) & !is.na(CESD_10_Exit) &
+                      !is.na(GAD_7_Baseline) & !is.na(GAD_7_Exit))
+
+#___________________________#
+#2: Descriptive Statistics  #
+#___________________________#
+BL_vars<-dput(names(COVID_Final[c(20,2,21,5,22,23,24,25,27,28,51,9,33)]))
+
+#All Participants with data at Follow-up 1, COVID Entry and COVID Exit
+Table1_continuous<-CreateTableOne(vars=BL_vars, data=COVID_Full)
+print(Table1_continuous,contDigits=2,missing=TRUE,quote=TRUE)
+
+#Analyzed sample at follow-up 1
+Table1_continuous<-CreateTableOne(vars=BL_vars, data=COVID_Final)
+print(Table1_continuous,contDigits=2,missing=TRUE,quote=TRUE)
+
+#Analyzed Sample at Follow-up 1 by Pet Ownership at FU1
+Table1_continuous<-CreateTableOne(vars=BL_vars, strata = "Pet_Owner_1", data=COVID_Final)
+print(Table1_continuous,contDigits=2,missing=TRUE,quote=TRUE)
+
+#Participant Sample at Follow-up 1 Stratified by Mental Health Disorder Status 
+Table1_continuous<-CreateTableOne(vars=BL_vars, strata = "Mental_health_1", data=COVID_Final)
+print(Table1_continuous,contDigits=2,missing=TRUE,quote=TRUE)
+
+#_______________________________________________________________________________________________________________________________#
+#3: Primary Analyses: How does pet ownership impact depressive symptoms in people with anxiety, depression, and mood disorders? #
+#_______________________________________________________________________________________________________________________________#
+
+####Set-up data set for linear mixed model####
+COVID_Full_Baseline<-COVID_Final[c(1,28,44:49,52,53,25,2,20,21,5,22,23,24,25,9,32,27,37)]
+COVID_Full_Exit<-COVID_Final[c(1,28,44:49,52,53,25,2,20,21,5,22,23,24,25,9,32,27,42)]
+
+COVID_Full_Baseline$time<-2
+COVID_Full_Exit$time<-3
+
+COVID_Full_Baseline<- rename(COVID_Full_Baseline, "CESD_10_FU1" = "CESD_10_1", "CESD_10"="CESD_10_Baseline", "Pet_Owner_FU1"="Pet_Owner_1",
+                             "Age"="Age_1", "BMI"="BMI_1", "Sex"="Sex_0", "Relationship_status"="Relationship_status_1", "Income_Level"="Income_Level_1",
+                             "Living_status"="Living_status_1", "Alcohol"="Alcohol_1", "Anxiety"="Anxiety_Any", "Education"="Education4_0",
+                             "Depression"="Depression_Any", "Mood_Disorders"="Mood_Disorders_Any","Chronic_Conditions"="Chronic_Conditions_1_1", "Smoking_Status"="Smoking_Status_0")
+
+COVID_Full_Exit<- rename(COVID_Full_Exit, "CESD_10_FU1" = "CESD_10_1", "CESD_10"="CESD_10_Exit", "Pet_Owner_FU1"="Pet_Owner_1", 
+                         "Age"="Age_1", "BMI"="BMI_1", "Sex"="Sex_0", "Relationship_status"="Relationship_status_1", "Income_Level"="Income_Level_1",
+                         "Living_status"="Living_status_1", "Alcohol"="Alcohol_1", "Anxiety"="Anxiety_Any","Education"="Education4_0",
+                         "Depression"="Depression_Any", "Mood_Disorders"="Mood_Disorders_Any","Chronic_Conditions"="Chronic_Conditions_1_1", "Smoking_Status"="Smoking_Status_0")
+
+COVID_Full_Complete<- rbind(COVID_Full_Baseline,COVID_Full_Exit)
+
+COVID_Full_Complete$logCESD<- log(1+COVID_Full_Complete$CESD_10)
+COVID_Full_Complete$logCESDFU1<- log(1+COVID_Full_Complete$CESD_10_FU1)
+describe(COVID_Full_Complete$logCESD)
+
+#### Anxiety ####
+#~~~~~~~~~~~~~~~#
+Anxiety<-subset(COVID_Final, Anxiety_Any == "Yes")
+describeBy(Anxiety$CESD_10_1, Anxiety$Pet_Owner_1)
+No_Anxiety<-subset(COVID_Final, Anxiety_Any == "No")
+describeBy(No_Anxiety$CESD_10_1, No_Anxiety$Pet_Owner_1)
+
+#Full model
+Anx_CESD_10_lmm_full<-lmer(logCESD~factor(Pet_Owner_FU1)*factor(time)*factor(Anxiety) + (1|ID) + logCESDFU1 + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status + 
+                             Smoking_Status + Alcohol, COVID_Full_Complete)
+summary(Anx_CESD_10_lmm_full)
+anova(Anx_CESD_10_lmm_full)
+Anx_CESD_10_lmm_full_2<-ref_grid(Anx_CESD_10_lmm_full, rg.limit = 153600)
+lsmeans(Anx_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety)|factor(time))
+contrast(lsmeans(Anx_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety)|factor(time)), "pairwise", adj="none")
+contrast<-confint(contrast(lsmeans(Anx_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety)|factor(time)), "pairwise", adj="none"), parm, level = 0.95)        
+T2diff<-contrast[1,4] - contrast[2,4]
+T2se<- sqrt(contrast[1,5]^2 + contrast[2,5]^2)
+T2tval<-T2diff/T2se
+T2pval=2*pt(-abs(T2tval),df=12599-1)
+T2diff
+T2se
+T2pval
+T3diff<-contrast[3,4] - contrast[4,4]
+T3se<- sqrt(contrast[3,5]^2 + contrast[4,5]^2)
+T3tval<-T3diff/T3se
+T3pval=2*pt(-abs(T3tval),df=12599-1)
+T3diff
+T3se
+T3pval
+
+
+#### Depression ####
+#~~~~~~~~~~~~~~~~~~#
+Depression<-subset(COVID_Final, Depression_Any == "Yes")
+describeBy(Depression$CESD_10_1, Depression$Pet_Owner_1)
+No_Depression<-subset(COVID_Final, Depression_Any == "No")
+describeBy(No_Depression$CESD_10_1, No_Depression$Pet_Owner_1)
+
+#Full model
+Dep_CESD_10_lmm_full<-lmer(CESD_10~factor(Pet_Owner_FU1)*factor(time)*factor(Depression) + (1|ID) + CESD_10_FU1 + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status + 
+                             Smoking_Status + Alcohol, COVID_Full_Complete)
+summary(Dep_CESD_10_lmm_full)
+anova(Dep_CESD_10_lmm_full)
+Dep_CESD_10_lmm_full_2<-ref_grid(Dep_CESD_10_lmm_full, rg.limit = 153600)
+lsmeans(Dep_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression)|factor(time))
+contrast(lsmeans(Dep_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression)|factor(time)), "pairwise", adj="none")
+confint(contrast(lsmeans(Dep_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression)|factor(time)), "pairwise", adj="none"), parm, level = 0.95)        
+contrast2<-confint(contrast(lsmeans(Dep_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression)|factor(time)), "pairwise", adj="none"), parm, level = 0.95)        
+T2diff<-contrast2[1,4] - contrast2[2,4]
+T2se<- sqrt(contrast2[1,5]^2 + contrast2[2,5]^2)
+T2tval<-T2diff/T2se
+T2pval=2*pt(-abs(T2tval),df=12599-1)
+T2diff
+T2se
+T2pval
+T3diff<-contrast2[3,4] - contrast2[4,4]
+T3se<- sqrt(contrast2[3,5]^2 + contrast2[4,5]^2)
+T3tval<-T3diff/T3se
+T3pval=2*pt(-abs(T3tval),df=12599-1)
+T3diff
+T3se
+T3pval
+
+#### Mood Disorders ####
+#~~~~~~~~~~~~~~~~~~~~~~#
+Mood_Disorder<-subset(COVID_Final, Mood_Disorders_Any == "Yes")
+describeBy(Mood_Disorder$CESD_10_1, Mood_Disorder$Pet_Owner_1)
+No_Mood_Disorder<-subset(COVID_Final, Mood_Disorders_Any == "No")
+describeBy(No_Mood_Disorder$CESD_10_1, No_Mood_Disorder$Pet_Owner_1)
+
+#Full model
+Mood_CESD_10_lmm_full<-lmer(CESD_10~factor(Pet_Owner_FU1)*factor(time)*factor(Mood_Disorders) + (1|ID) + CESD_10_FU1 + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status + 
+                              Smoking_Status + Alcohol, COVID_Full_Complete)
+summary(Mood_CESD_10_lmm_full)
+anova(Mood_CESD_10_lmm_full)
+Mood_CESD_10_lmm_full_2<-ref_grid(Mood_CESD_10_lmm_full, rg.limit = 153600)
+lsmeans(Mood_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders)|factor(time))
+contrast(lsmeans(Mood_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders)|factor(time)), "pairwise", adj="none")
+confint(contrast(lsmeans(Mood_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders)|factor(time)), "pairwise", adj="none"), parm, level = 0.95)        
+contrast3<-confint(contrast(lsmeans(Mood_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders)|factor(time)), "pairwise", adj="none"), parm, level = 0.95)        
+T2diff<-contrast3[1,4] - contrast[2,4]
+T2se<- sqrt(contrast3[1,5]^2 + contrast3[2,5]^2)
+T2tval<-T2diff/T2se
+T2pval=2*pt(-abs(T2tval),df=12599-1)
+T2diff
+T2se
+T2pval
+T3diff<-contrast3[3,4] - contrast3[4,4]
+T3se<- sqrt(contrast3[3,5]^2 + contrast3[4,5]^2)
+T3tval<-T3diff/T3se
+T3pval=2*pt(-abs(T3tval),df=12599-1)
+T3diff
+T3se
+T3pval
+
+#_____________________________________________________________________________________________#
+#4: Secondary Analysis #1: Multiple vs. Single Mental Health Disorders and pet ownership      #
+#_____________________________________________________________________________________________#
+multiple<-subset(COVID_Final, Multiple_Disorders == "Multiple")
+describeBy(multiple$CESD_10_1, multiple$Pet_Owner_1)
+single<-subset(COVID_Final, Multiple_Disorders == "Single")
+describeBy(single$CESD_10_1, single$Pet_Owner_1)
+none<-subset(COVID_Final, Multiple_Disorders == "None")
+describeBy(none$CESD_10_1, none$Pet_Owner_1)
+
+#Full model
+Multi_CESD_10_lmm_full<-lmer(CESD_10~factor(Pet_Owner_FU1)*factor(time)*factor(Multiple_Disorders) + (1|ID) + CESD_10_FU1 + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status +
+                              Smoking_Status + Alcohol, COVID_Full_Complete)
+summary(Multi_CESD_10_lmm_full)
+anova(Multi_CESD_10_lmm_full)
+Mood_CESD_10_lmm_full_2<-ref_grid(Multi_CESD_10_lmm_full, rg.limit = 115200)
+lsmeans(Mood_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Multiple_Disorders)|factor(time))
+contrast(lsmeans(Mood_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Multiple_Disorders)|factor(time)), "pairwise", adj="none")
+confint(contrast(lsmeans(Mood_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Multiple_Disorders)|factor(time)), "pairwise", adj="none"), parm, level = 0.95)        
+contrast4<-confint(contrast(lsmeans(Mood_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Multiple_Disorders)|factor(time)), "pairwise", adj="none"), parm, level = 0.95)        
+T2diff<-contrast4[1,4] - contrast4[2,4]
+T2se<- sqrt(contrast4[1,5]^2 + contrast4[2,5]^2)
+T2tval<-T2diff/T2se
+T2pval=2*pt(-abs(T2tval),df=12599-1)
+T2diff
+T2se
+T2pval
+T3diff<-contrast4[3,4] - contrast4[4,4]
+T3se<- sqrt(contrast4[3,5]^2 + contrast4[4,5]^2)
+T3tval<-T3diff/T3se
+T3pval=2*pt(-abs(T3tval),df=12599-1)
+T3diff
+T3se
+T3pval
+
+#_____________________________________________________________________________________________#
+#5: Secondary Analysis #2: Pet ownership and GAD-7 scores during COVID-19                     #
+#_____________________________________________________________________________________________#
+
+
+#######################BASELINE######################
+COVID_Final_Baseline_GAD<- rename(COVID_Final, "CESD_10_FU1" = "CESD_10_1", "CESD_10"="CESD_10_Baseline", "Pet_Owner_FU1"="Pet_Owner_1",
+                         "Age"="Age_1", "BMI"="BMI_1", "Sex"="Sex_0", "Relationship_status"="Relationship_status_1", "Income_Level"="Income_Level_1",
+                         "Living_status"="Living_status_1", "Alcohol"="Alcohol_1", "Anxiety"="Anxiety_Any", "Education"="Education4_0",
+                         "Depression"="Depression_Any", "Mood_Disorders"="Mood_Disorders_Any","Chronic_Conditions"="Chronic_Conditions_1_1", "Smoking_Status"="Smoking_Status_0")
+
+
+#### Anxiety ####
+#~~~~~~~~~~~~~~~#
+
+#Full model
+Anx_GAD7_lmm_full<-lm(GAD_7_Baseline~factor(Pet_Owner_FU1)*factor(Anxiety) + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status + Chronic_Conditions +
+                        Smoking_Status + Alcohol, COVID_Final_Baseline_GAD)
+summary(Anx_GAD7_lmm_full)
+anova(Anx_GAD7_lmm_full)
+Anx_GAD7_lmm_full_2<-ref_grid(Anx_GAD7_lmm_full, rg.limit = 153600)
+lsmeans(Anx_GAD7_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety))
+contrast(lsmeans(Anx_GAD7_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety)), "pairwise", adj="none")
+confint(contrast(lsmeans(Anx_GAD7_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety)), "pairwise", adj="none"), parm, level = 0.95)        
+contrast5<-confint(contrast(lsmeans(Anx_GAD7_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety)), "pairwise", adj="none"), parm, level = 0.95)        
+T2diff<-contrast5[1,3] - contrast5[2,3]
+T2se<- sqrt(contrast5[1,4]^2 + contrast5[2,4]^2)
+T2tval<-T2diff/T2se
+T2pval=2*pt(-abs(T2tval),df=12599-1)
+T2diff
+T2se
+T2pval
+
+
+#### Depression ####
+#~~~~~~~~~~~~~~~~~~#
+
+#Full model
+Dep_GAD7_10_lmm_full<-lm(GAD_7_Baseline~factor(Pet_Owner_FU1)*factor(Depression) + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status +
+                           Smoking_Status + Alcohol, COVID_Final_Baseline_GAD)
+summary(Dep_GAD7_10_lmm_full)
+anova(Dep_GAD7_10_lmm_full)
+Dep_GAD7_10_lmm_full_2<-ref_grid(Dep_GAD7_10_lmm_full, rg.limit = 38400)
+lsmeans(Dep_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression))
+contrast(lsmeans(Dep_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression)), "pairwise", adj="none")
+confint(contrast(lsmeans(Dep_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression)), "pairwise", adj="none"), parm, level = 0.95)        
+contrast6<-confint(contrast(lsmeans(Dep_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression)), "pairwise", adj="none"), parm, level = 0.95)        
+T2diff<-contrast6[1,3] - contrast6[2,3]
+T2se<- sqrt(contrast6[1,4]^2 + contrast6[2,4]^2)
+T2tval<-T2diff/T2se
+T2pval=2*pt(-abs(T2tval),df=12599-1)
+T2diff
+T2se
+T2pval
+
+#### Mood Disorders ####
+#~~~~~~~~~~~~~~~~~~~~~~#
+
+#Full model
+Mood_GAD7_10_lmm_full<-lm(GAD_7_Baseline~factor(Pet_Owner_FU1)*factor(Mood_Disorders) + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status +
+                            Smoking_Status + Alcohol, COVID_Final_Baseline_GAD)
+summary(Mood_GAD7_10_lmm_full)
+anova(Mood_GAD7_10_lmm_full)
+Mood_GAD7_10_lmm_full_2<-ref_grid(Mood_GAD7_10_lmm_full, rg.limit = 38400)
+lsmeans(Mood_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders))
+contrast(lsmeans(Mood_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders)), "pairwise", adj="none")
+confint(contrast(lsmeans(Mood_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders)), "pairwise", adj="none"), parm, level = 0.95)  
+contrast6<-confint(contrast(lsmeans(Mood_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders)), "pairwise", adj="none"), parm, level = 0.95)        
+T2diff<-contrast5[1,3] - contrast5[2,3]
+T2se<- sqrt(contrast5[1,4]^2 + contrast5[2,4]^2)
+T2tval<-T2diff/T2se
+T2pval=2*pt(-abs(T2tval),df=12599-1)
+T2diff
+T2se
+T2pval
+
+colnames(COVID_Final_Exit_GAD)
+####Multiple vs Single Disorder ####
+#~~~~~~~~~~~~~~~~~~~~~~#
+
+#Full model
+Multiple_GAD7_10_lmm_full<-lm(GAD_7_Baseline~factor(Pet_Owner_FU1)*factor(Multiple_Disorders) + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status +
+                            Smoking_Status + Alcohol, COVID_Final_Baseline_GAD)
+summary(Multiple_GAD7_10_lmm_full)
+anova(Multiple_GAD7_10_lmm_full)
+Multiple_GAD7_10_lmm_full_2<-ref_grid(Multiple_GAD7_10_lmm_full, rg.limit = 57600)
+lsmeans(Multiple_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Multiple_Disorders))
+contrast(lsmeans(Multiple_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Multiple_Disorders)), "pairwise", adj="none")
+confint(contrast(lsmeans(Multiple_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Multiple_Disorders)), "pairwise", adj="none"), parm, level = 0.95)  
+contrast6<-confint(contrast(lsmeans(Multiple_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Multiple_Disorders)), "pairwise", adj="none"), parm, level = 0.95)        
+T2diff<-contrast5[1,3] - contrast5[2,3]
+T2se<- sqrt(contrast5[1,4]^2 + contrast5[2,4]^2)
+T2tval<-T2diff/T2se
+T2pval=2*pt(-abs(T2tval),df=12599-1)
+T2diff
+T2se
+T2pval
+
+#######################EXIT######################
+COVID_Final_Exit_GAD<- rename(COVID_Final, "CESD_10_FU1" = "CESD_10_1", "CESD_10"="CESD_10_Baseline", "Pet_Owner_FU1"="Pet_Owner_1",
+                                  "Age"="Age_1", "BMI"="BMI_1", "Sex"="Sex_0", "Relationship_status"="Relationship_status_1", "Income_Level"="Income_Level_1",
+                                  "Living_status"="Living_status_1", "Alcohol"="Alcohol_1", "Anxiety"="Anxiety_Any", "Education"="Education4_0",
+                                  "Depression"="Depression_Any", "Mood_Disorders"="Mood_Disorders_Any","Chronic_Conditions"="Chronic_Conditions_1_1", "Smoking_Status"="Smoking_Status_0")
+
+#### Anxiety ####
+#~~~~~~~~~~~~~~~#
+
+#Full model
+Anx_GAD7Exit_lmm_full<-lm(GAD_7_Exit~factor(Pet_Owner_FU1)*factor(Anxiety) + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status +
+                            Smoking_Status + Alcohol + GAD_7_Baseline, COVID_Final_Exit_GAD)
+summary(Anx_GAD7Exit_lmm_full)
+anova(Anx_GAD7Exit_lmm_full)
+Anx_GAD7Exit_lmm_full_2<-ref_grid(Anx_GAD7Exit_lmm_full, rg.limit = 57600)
+lsmeans(Anx_GAD7Exit_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety))
+contrast(lsmeans(Anx_GAD7Exit_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety)), "pairwise", adj="none")
+confint(contrast(lsmeans(Anx_GAD7Exit_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety)), "pairwise", adj="none"), parm, level = 0.95)        
+contrast7<-confint(contrast(lsmeans(Anx_GAD7Exit_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety)), "pairwise", adj="none"), parm, level = 0.95)        
+T2diff<-contrast7[1,3] - contrast7[2,3]
+T2se<- sqrt(contrast7[1,4]^2 + contrast7[2,4]^2)
+T2tval<-T2diff/T2se
+T2pval=2*pt(-abs(T2tval),df=12599-1)
+T2diff
+T2se
+T2pval
+
+
+#### Depression ####
+#~~~~~~~~~~~~~~~~~~#
+#Full model
+Dep_GAD7Exit_10_lmm_full<-lm(GAD_7_Exit~factor(Pet_Owner_FU1)*factor(Depression) + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status +
+                               Smoking_Status + Alcohol + GAD_7_Baseline, COVID_Final_Exit_GAD)
+summary(Dep_GAD7Exit_10_lmm_full)
+anova(Dep_GAD7Exit_10_lmm_full)
+Dep_GAD7Exit_10_lmm_full_2<-ref_grid(Dep_GAD7Exit_10_lmm_full, rg.limit = 38400)
+lsmeans(Dep_GAD7Exit_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression))
+contrast(lsmeans(Dep_GAD7Exit_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression)), "pairwise", adj="none")
+confint(contrast(lsmeans(Dep_GAD7Exit_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression)), "pairwise", adj="none"), parm, level = 0.95)        
+contrast8<-confint(contrast(lsmeans(Dep_GAD7Exit_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression)), "pairwise", adj="none"), parm, level = 0.95)        
+T2diff<-contrast8[1,3] - contrast8[2,3]
+T2se<- sqrt(contrast8[1,4]^2 + contrast8[2,4]^2)
+T2tval<-T2diff/T2se
+T2pval=2*pt(-abs(T2tval),df=12599-1)
+T2diff
+T2se
+T2pval
+
+
+#### Mood Disorders ####
+#~~~~~~~~~~~~~~~~~~~~~~#
+
+#Full model
+Mood_GAD7_10_lmm_full<-lm(GAD_7_Exit~factor(Pet_Owner_FU1)*factor(Mood_Disorders) + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status +
+                            Smoking_Status + Alcohol + GAD_7_Baseline, COVID_Final_Exit_GAD)
+summary(Mood_GAD7_10_lmm_full)
+anova(Mood_GAD7_10_lmm_full)
+Mood_GAD7_10_lmm_full_2<-ref_grid(Mood_GAD7_10_lmm_full, rg.limit = 57600)
+lsmeans(Mood_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders))
+contrast(lsmeans(Mood_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders)), "pairwise", adj="none")
+confint(contrast(lsmeans(Mood_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders)), "pairwise", adj="none"), parm, level = 0.95)        
+contrast9<-confint(contrast(lsmeans(Mood_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression)), "pairwise", adj="none"), parm, level = 0.95)        
+T2diff<-contrast9[1,3] - contrast9[2,3]
+T2se<- sqrt(contrast9[1,4]^2 + contrast9[2,4]^2)
+T2tval<-T2diff/T2se
+T2pval=2*pt(-abs(T2tval),df=12599-1)
+T2diff
+T2se
+T2pval
+
+
+#### Multiple vs. Single Disorders ####
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+
+#Full model
+Multiple_GAD7Exit_10_lmm_full<-lm(GAD_7_Exit~factor(Pet_Owner_FU1)*factor(Multiple_Disorders) + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status +
+                            Smoking_Status + Alcohol + GAD_7_Baseline, COVID_Final_Exit_GAD)
+summary(Multiple_GAD7Exit_10_lmm_full)
+anova(Multiple_GAD7Exit_10_lmm_full)
+Multiple_GAD7Exit_10_lmm_full_2<-ref_grid(Multiple_GAD7Exit_10_lmm_full, rg.limit = 57600)
+lsmeans(Multiple_GAD7Exit_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Multiple_Disorders))
+contrast(lsmeans(Multiple_GAD7Exit_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Multiple_Disorders)), "pairwise", adj="none")
+confint(contrast(lsmeans(Multiple_GAD7Exit_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Multiple_Disorders)), "pairwise", adj="none"), parm, level = 0.95)        
+contrast10<-confint(contrast(lsmeans(Multiple_GAD7Exit_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Multiple_Disorders)), "pairwise", adj="none"), parm, level = 0.95)        
+T2diff<-contrast10[1,3] - contrast10[2,3]
+T2se<- sqrt(contrast10[1,4]^2 + contrast10[2,4]^2)
+T2tval<-T2diff/T2se
+T2pval=2*pt(-abs(T2tval),df=12599-1)
+T2diff
+T2se
+T2pval
+
+
+
+#________________________________________________________________#
+#6: Sensitivity Analysis #1: Mood Changes and pet ownership      #
+#________________________________________________________________#
+Anxiety_BL<-subset(COVID_Final, Anxiety_0 == "Yes" & Anxiety_1 == "No")
+describeBy(Anxiety_BL$CESD_10_1, Anxiety_BL$Pet_Owner_1)
+Anxiety_FU1<-subset(COVID_Final, Anxiety_0 == "No" & Anxiety_1 == "Yes")
+describeBy(Anxiety_FU1$CESD_10_1, Anxiety_FU1$Pet_Owner_1)
+Anxiety_Both<-subset(COVID_Final, Anxiety_0 == "Yes" & Anxiety_1 == "Yes")
+describeBy(Anxiety_Both$CESD_10_1, Anxiety_Both$Pet_Owner_1)
+
+#### Changes in Anxiety ####
+#~~~~~~~~~~~~~~~~~~~~~~~~~~#
+
+#Full model only
+AnxChange_CESD_10_lmm_full<-lmer(CESD_10~factor(Pet_Owner_FU1)*factor(time)*factor(Anxiety_Change) + (1|ID) + CESD_10_FU1 + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status +
+                                   Smoking_Status + Alcohol, COVID_Full_Complete)
+summary(AnxChange_CESD_10_lmm_full)
+anova(AnxChange_CESD_10_lmm_full)
+AnxChange_CESD_10_lmm_crude_2<-ref_grid(AnxChange_CESD_10_lmm_full, rg.limit = 153600)
+lsmeans(AnxChange_CESD_10_lmm_crude_2, ~factor(Pet_Owner_FU1)|factor(Anxiety_Change)|factor(time))
+contrast(lsmeans(AnxChange_CESD_10_lmm_crude_2, ~factor(Pet_Owner_FU1)|factor(Anxiety_Change)|factor(time)), "pairwise", adj="none")
+confint(contrast(lsmeans(AnxChange_CESD_10_lmm_crude_2, ~factor(Pet_Owner_FU1)|factor(Anxiety_Change)|factor(time)), "pairwise", adj="none"), parm, level = 0.95)        
+
+
+#### Changes in Depression ####
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+Depression_BL<-subset(COVID_Final, Clin_Depression_0 == "Yes" & Clin_Depression_1 == "No")
+describeBy(Depression_BL$CESD_10_1, Depression_BL$Pet_Owner_1)
+Depression_FU1<-subset(COVID_Final, Clin_Depression_0 == "No" & Clin_Depression_1 == "Yes")
+describeBy(Depression_FU1$CESD_10_1, Depression_FU1$Pet_Owner_1)
+Depression_Both<-subset(COVID_Final, Clin_Depression_0 == "Yes" & Clin_Depression_1 == "Yes")
+describeBy(Depression_Both$CESD_10_1, Depression_Both$Pet_Owner_1)
+
+#Full model only
+DepChange_CESD_10_lmm_full<-lmer(CESD_10~factor(Pet_Owner_FU1)*factor(time)*factor(Depression_Change) + (1|ID) + CESD_10_FU1 + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status +
+                                   Smoking_Status + Alcohol, COVID_Full_Complete)
+summary(DepChange_CESD_10_lmm_full)
+anova(DepChange_CESD_10_lmm_full)
+DepChange_CESD_10_lmm_full_2<-ref_grid(DepChange_CESD_10_lmm_full, rg.limit = 153600)
+lsmeans(DepChange_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression_Change)|factor(time))
+contrast(lsmeans(DepChange_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression_Change)|factor(time)), "pairwise", adj="none")
+confint(contrast(lsmeans(DepChange_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression_Change)|factor(time)), "pairwise", adj="none"), parm, level = 0.95)        
+
+
+#### Changes in Mood Disorders ####
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+Mood_BL<-subset(COVID_Final, Mood_Disord_0 == "Yes" & Mood_Disord_1 == "No")
+describeBy(Mood_BL$CESD_10_1, Mood_BL$Pet_Owner_1)
+Mood_FU1<-subset(COVID_Final, Mood_Disord_0 == "No" & Mood_Disord_1 == "Yes")
+describeBy(Mood_FU1$CESD_10_1, Mood_FU1$Pet_Owner_1)
+Mood_Both<-subset(COVID_Final, Mood_Disord_0 == "Yes" & Mood_Disord_1 == "Yes")
+describeBy(Mood_Both$CESD_10_1, Mood_Both$Pet_Owner_1)
+
+#Full model
+MoodChange_CESD_10_lmm_full<-lmer(CESD_10~factor(Pet_Owner_FU1)*factor(time)*factor(Mood_Disord_Change) + (1|ID) + CESD_10_FU1 + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status +
+                                   Smoking_Status + Alcohol, COVID_Full_Complete)
+summary(MoodChange_CESD_10_lmm_full)
+anova(MoodChange_CESD_10_lmm_full)
+MoodChange_CESD_10_lmm_full_2<-ref_grid(MoodChange_CESD_10_lmm_full, rg.limit = 153600)
+lsmeans(MoodChange_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disord_Change)|factor(time))
+contrast(lsmeans(MoodChange_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disord_Change)|factor(time)), "pairwise", adj="none")
+confint(contrast(lsmeans(MoodChange_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disord_Change)|factor(time)), "pairwise", adj="none"), parm, level = 0.95)        
+
+
+#______________________________________________________________________________#
+#6: Sensitivity Analysis #2: Pet ownership changes on CESD Score               #
+#______________________________________________________________________________#
+New_owner<-subset(COVID_Final, Pet_Owner_Changes == "New Owner")
+Old_owner<-subset(COVID_Final, Pet_Owner_Changes == "Former Owner")
+Same_owner<-subset(COVID_Final, Pet_Owner_Changes == "Continued Owner")
+Non_owner<-subset(COVID_Final, Pet_Owner_Changes == "No Pets")
+
+
+#Anxiety#
+#~~~~~~~#
+describeBy(New_owner$CESD_10_1, New_owner$Anxiety_Any)
+describeBy(Old_owner$CESD_10_1, Old_owner$Anxiety_Any)
+describeBy(Same_owner$CESD_10_1, Same_owner$Anxiety_Any)
+describeBy(Non_owner$CESD_10_1, Non_owner$Anxiety_Any)
+
+AnxPetChange_CESD_10_lmm_full<-lmer(CESD_10~factor(Pet_Owner_Changes)*factor(time)*factor(Anxiety) + (1|ID) + CESD_10_FU1 + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status +
+                                      Smoking_Status + Alcohol, COVID_Full_Complete)
+summary(AnxPetChange_CESD_10_lmm_full)
+anova(AnxPetChange_CESD_10_lmm_full)
+AnxPetChange_CESD_10_lmm_full_2<-ref_grid(AnxPetChange_CESD_10_lmm_full, rg.limit = 153600)
+lsmeans(AnxPetChange_CESD_10_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Anxiety)|factor(time))
+contrast(lsmeans(AnxPetChange_CESD_10_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Anxiety)|factor(time)), "pairwise", adj="none")
+confint(contrast(lsmeans(AnxPetChange_CESD_10_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Anxiety)|factor(time)), "pairwise", adj="none"), parm, level = 0.95)        
+
+
+
+#Depression#
+#~~~~~~~~~~#
+describeBy(New_owner$CESD_10_1, New_owner$Depression_Any)
+describeBy(Old_owner$CESD_10_1, Old_owner$Depression_Any)
+describeBy(Same_owner$CESD_10_1, Same_owner$Depression_Any)
+describeBy(Non_owner$CESD_10_1, Non_owner$Depression_Any)
+
+DepPetChange_CESD_10_lmm_full<-lmer(CESD_10~factor(Pet_Owner_Changes)*factor(time)*factor(Depression) + (1|ID) + CESD_10_FU1 + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status +
+                                      Smoking_Status + Alcohol, COVID_Full_Complete)
+summary(DepPetChange_CESD_10_lmm_full)
+anova(DepPetChange_CESD_10_lmm_full)
+DepPetChange_CESD_10_lmm_full_2<-ref_grid(DepPetChange_CESD_10_lmm_full, rg.limit = 153600)
+lsmeans(DepPetChange_CESD_10_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Depression)|factor(time))
+contrast(lsmeans(DepPetChange_CESD_10_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Depression)|factor(time)), "pairwise", adj="none")
+confint(contrast(lsmeans(DepPetChange_CESD_10_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Depression)|factor(time)), "pairwise", adj="none"), parm, level = 0.95)        
+
+
+#Mood Disorders#
+#~~~~~~~~~~~~~~#
+describeBy(New_owner$CESD_10_1, New_owner$Mood_Disorders_Any)
+describeBy(Old_owner$CESD_10_1, Old_owner$Mood_Disorders_Any)
+describeBy(Same_owner$CESD_10_1, Same_owner$Mood_Disorders_Any)
+describeBy(Non_owner$CESD_10_1, Non_owner$Mood_Disorders_Any)
+
+MoodPetChange_CESD_10_lmm_full<-lmer(CESD_10~factor(Pet_Owner_Changes)*factor(time)*factor(Mood_Disorders) + (1|ID) + CESD_10_FU1 + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status +
+                                      Smoking_Status + Alcohol, COVID_Full_Complete)
+summary(MoodPetChange_CESD_10_lmm_full)
+anova(MoodPetChange_CESD_10_lmm_full)
+MoodPetChange_CESD_10_lmm_full_2<-ref_grid(MoodPetChange_CESD_10_lmm_full, rg.limit = 153600)
+lsmeans(MoodPetChange_CESD_10_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Mood_Disorders)|factor(time))
+contrast(lsmeans(MoodPetChange_CESD_10_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Mood_Disorders)|factor(time)), "pairwise", adj="none")
+confint(contrast(lsmeans(MoodPetChange_CESD_10_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Mood_Disorders)|factor(time)), "pairwise", adj="none"), parm, level = 0.95)        
+
+
+#______________________________________________________________________________#
+#8: Sensitivity Analysis #3: Changes in Mood Status on GAD Score               #
+#______________________________________________________________________________#
+
+######BASELINE#############
+
+#Anxiety
+Anx_GAD7_lmm_full<-lm(GAD_7_Baseline~factor(Pet_Owner_FU1)*factor(Anxiety_Change) + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status +
+                        Smoking_Status + Alcohol, COVID_Final_Baseline_GAD)
+summary(Anx_GAD7_lmm_full)
+anova(Anx_GAD7_lmm_full)
+Anx_GAD7_lmm_full_2<-ref_grid(Anx_GAD7_lmm_full, rg.limit = 76800)
+lsmeans(Anx_GAD7_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety_Change))
+contrast(lsmeans(Anx_GAD7_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety_Change)), "pairwise", adj="none")
+confint(contrast(lsmeans(Anx_GAD7_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety_Change)), "pairwise", adj="none"), parm, level = 0.95)        
+
+#Depression#
+Dep_GAD7_10_lmm_full<-lm(GAD_7_Baseline~factor(Pet_Owner_FU1)*factor(Depression_Change) + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status +
+                           Smoking_Status + Alcohol, COVID_Final_Baseline_GAD)
+summary(Dep_GAD7_10_lmm_full)
+anova(Dep_GAD7_10_lmm_full)
+Dep_GAD7_10_lmm_full_2<-ref_grid(Dep_GAD7_10_lmm_full, rg.limit = 76800)
+lsmeans(Dep_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression_Change))
+contrast(lsmeans(Dep_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression_Change)), "pairwise", adj="none")
+confint(contrast(lsmeans(Dep_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression_Change)), "pairwise", adj="none"), parm, level = 0.95)        
+
+#Mood Disorder#
+Mood_GAD7_10_lmm_full<-lm(GAD_7_Baseline~factor(Pet_Owner_FU1)*factor(Mood_Disord_Change) + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status +
+                            Smoking_Status + Alcohol, COVID_Final_Baseline_GAD)
+summary(Mood_GAD7_10_lmm_full)
+anova(Mood_GAD7_10_lmm_full)
+Mood_GAD7_10_lmm_full_2<-ref_grid(Mood_GAD7_10_lmm_full, rg.limit = 76800)
+lsmeans(Mood_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disord_Change))
+contrast(lsmeans(Mood_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disord_Change)), "pairwise", adj="none")
+confint(contrast(lsmeans(Mood_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disord_Change)), "pairwise", adj="none"), parm, level = 0.95)  
+
+
+######EXIT#############
+
+#Anxiety
+Anx_GAD7_lmm_full<-lm(GAD_7_Exit~factor(Pet_Owner_FU1)*factor(Anxiety_Change) + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status +
+                        Smoking_Status + Alcohol + GAD_7_Baseline, COVID_Final_Exit_GAD)
+summary(Anx_GAD7_lmm_full)
+anova(Anx_GAD7_lmm_full)
+Anx_GAD7_lmm_full_2<-ref_grid(Anx_GAD7_lmm_full, rg.limit = 76800)
+lsmeans(Anx_GAD7_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety_Change))
+contrast(lsmeans(Anx_GAD7_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety_Change)), "pairwise", adj="none")
+confint(contrast(lsmeans(Anx_GAD7_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety_Change)), "pairwise", adj="none"), parm, level = 0.95)        
+
+#Depression#
+Dep_GAD7_10_lmm_full<-lm(GAD_7_Exit~factor(Pet_Owner_FU1)*factor(Depression_Change) + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status +
+                           Smoking_Status + Alcohol + GAD_7_Baseline, COVID_Final_Exit_GAD)
+summary(Dep_GAD7_10_lmm_full)
+anova(Dep_GAD7_10_lmm_full)
+Dep_GAD7_10_lmm_full_2<-ref_grid(Dep_GAD7_10_lmm_full, rg.limit = 76800)
+lsmeans(Dep_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression_Change))
+contrast(lsmeans(Dep_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression_Change)), "pairwise", adj="none")
+confint(contrast(lsmeans(Dep_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression_Change)), "pairwise", adj="none"), parm, level = 0.95)        
+
+#Mood Disorder#
+Mood_GAD7_10_lmm_full<-lm(GAD_7_Exit~factor(Pet_Owner_FU1)*factor(Mood_Disord_Change) + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status +
+                            Smoking_Status + Alcohol + GAD_7_Baseline, COVID_Final_Exit_GAD)
+summary(Mood_GAD7_10_lmm_full)
+anova(Mood_GAD7_10_lmm_full)
+Mood_GAD7_10_lmm_full_2<-ref_grid(Mood_GAD7_10_lmm_full, rg.limit = 76800)
+lsmeans(Mood_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disord_Change))
+contrast(lsmeans(Mood_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disord_Change)), "pairwise", adj="none")
+confint(contrast(lsmeans(Mood_GAD7_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disord_Change)), "pairwise", adj="none"), parm, level = 0.95)  
+
+
+
+
+
+
+#______________________________________________________________________________#
+#9: Sensitivity Analysis #4: Changes in Pet Ownership on GAD Score             #
+#______________________________________________________________________________#
+
+
+######BASELINE#############
+
+#Anxiety
+Anx_GAD7_lmm_full<-lm(GAD_7_Baseline~factor(Pet_Owner_Changes)*factor(Anxiety) + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status +
+                        Smoking_Status + Alcohol, COVID_Final_Baseline_GAD)
+summary(Anx_GAD7_lmm_full)
+anova(Anx_GAD7_lmm_full)
+Anx_GAD7_lmm_full_2<-ref_grid(Anx_GAD7_lmm_full, rg.limit = 76800)
+lsmeans(Anx_GAD7_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Anxiety))
+contrast(lsmeans(Anx_GAD7_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Anxiety)), "pairwise", adj="none")
+confint(contrast(lsmeans(Anx_GAD7_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Anxiety)), "pairwise", adj="none"), parm, level = 0.95)        
+
+#Depression#
+Dep_GAD7_10_lmm_full<-lm(GAD_7_Baseline~factor(Pet_Owner_Changes)*factor(Depression) + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status +
+                           Smoking_Status + Alcohol, COVID_Final_Baseline_GAD)
+summary(Dep_GAD7_10_lmm_full)
+anova(Dep_GAD7_10_lmm_full)
+Dep_GAD7_10_lmm_full_2<-ref_grid(Dep_GAD7_10_lmm_full, rg.limit = 76800)
+lsmeans(Dep_GAD7_10_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Depression))
+contrast(lsmeans(Dep_GAD7_10_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Depression)), "pairwise", adj="none")
+confint(contrast(lsmeans(Dep_GAD7_10_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Depression)), "pairwise", adj="none"), parm, level = 0.95)        
+
+#Mood Disorder#
+Mood_GAD7_10_lmm_full<-lm(GAD_7_Baseline~factor(Pet_Owner_Changes)*factor(Mood_Disorders) + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status +
+                            Smoking_Status + Alcohol, COVID_Final_Baseline_GAD)
+summary(Mood_GAD7_10_lmm_full)
+anova(Mood_GAD7_10_lmm_full)
+Mood_GAD7_10_lmm_full_2<-ref_grid(Mood_GAD7_10_lmm_full, rg.limit = 76800)
+lsmeans(Mood_GAD7_10_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Mood_Disorders))
+contrast(lsmeans(Mood_GAD7_10_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Mood_Disorders)), "pairwise", adj="none")
+confint(contrast(lsmeans(Mood_GAD7_10_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Mood_Disorders)), "pairwise", adj="none"), parm, level = 0.95)  
+
+
+######EXIT#############
+
+#Anxiety
+Anx_GAD7_lmm_full<-lm(GAD_7_Exit~factor(Pet_Owner_Changes)*factor(Anxiety) + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status +
+                        Smoking_Status + Alcohol + GAD_7_Baseline, COVID_Final_Exit_GAD)
+summary(Anx_GAD7_lmm_full)
+anova(Anx_GAD7_lmm_full)
+Anx_GAD7_lmm_full_2<-ref_grid(Anx_GAD7_lmm_full, rg.limit = 76800)
+lsmeans(Anx_GAD7_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Anxiety))
+contrast(lsmeans(Anx_GAD7_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Anxiety)), "pairwise", adj="none")
+confint(contrast(lsmeans(Anx_GAD7_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Anxiety)), "pairwise", adj="none"), parm, level = 0.95)        
+
+#Depression#
+Dep_GAD7_10_lmm_full<-lm(GAD_7_Exit~factor(Pet_Owner_Changes)*factor(Depression) + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status +
+                           Smoking_Status + Alcohol + GAD_7_Baseline, COVID_Final_Exit_GAD)
+summary(Dep_GAD7_10_lmm_full)
+anova(Dep_GAD7_10_lmm_full)
+Dep_GAD7_10_lmm_full_2<-ref_grid(Dep_GAD7_10_lmm_full, rg.limit = 76800)
+lsmeans(Dep_GAD7_10_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Depression))
+contrast(lsmeans(Dep_GAD7_10_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Depression)), "pairwise", adj="none")
+confint(contrast(lsmeans(Dep_GAD7_10_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Depression)), "pairwise", adj="none"), parm, level = 0.95)        
+
+#Mood Disorder#
+Mood_GAD7_10_lmm_full<-lm(GAD_7_Exit~factor(Pet_Owner_Changes)*factor(Mood_Disorders) + Age + Sex + BMI + Relationship_status + Education + Income_Level + Living_status +
+                            Smoking_Status + Alcohol + GAD_7_Baseline, COVID_Final_Exit_GAD)
+summary(Mood_GAD7_10_lmm_full)
+anova(Mood_GAD7_10_lmm_full)
+Mood_GAD7_10_lmm_full_2<-ref_grid(Mood_GAD7_10_lmm_full, rg.limit = 76800)
+lsmeans(Mood_GAD7_10_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Mood_Disorders))
+contrast(lsmeans(Mood_GAD7_10_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Mood_Disorders)), "pairwise", adj="none")
+confint(contrast(lsmeans(Mood_GAD7_10_lmm_full_2, ~factor(Pet_Owner_Changes)|factor(Mood_Disorders)), "pairwise", adj="none"), parm, level = 0.95)  
+
+
+
+#______________________________________________________________________________#
+#10: Sensitivity Analysis #5: Sex Differences on CESD Score                    #
+#______________________________________________________________________________#
+Males_CESD<-subset(COVID_Full_Complete, Sex == "M")
+Females_CESD<-subset(COVID_Full_Complete, Sex == "F")
+
+
+#Anxiety#
+#~~~~~~~#
+describeBy(Males_CESD$CESD_10_FU1, Males_CESD$Anxiety)
+describeBy(Females_CESD$CESD_10_FU1, Females_CESD$Anxiety)
+describeBy(Males_CESD$CESD_10_FU1, list(Males_CESD$Anxiety, Males_CESD$Pet_Owner_FU1))
+describeBy(Females_CESD$CESD_10_FU1, list(Females_CESD$Anxiety, Females_CESD$Pet_Owner_FU1))
+
+#Males
+AnxMale_CESD_10_lmm_full<-lmer(CESD_10~factor(Pet_Owner_FU1)*factor(time)*factor(Anxiety) + (1|ID) + CESD_10_FU1 + Age + BMI + Relationship_status + Education + Income_Level + Living_status +
+                                      Smoking_Status + Alcohol, Males_CESD)
+summary(AnxMale_CESD_10_lmm_full)
+anova(AnxMale_CESD_10_lmm_full)
+AnxMale_CESD_10_lmm_full_2<-ref_grid(AnxMale_CESD_10_lmm_full, rg.limit = 153600)
+lsmeans(AnxMale_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety)|factor(time))
+contrast(lsmeans(AnxMale_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety)|factor(time)), "pairwise", adj="none")
+confint(contrast(lsmeans(AnxMale_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety)|factor(time)), "pairwise", adj="none"), parm, level = 0.95)        
+
+#Females
+AnxFemale_CESD_10_lmm_full<-lmer(CESD_10~factor(Pet_Owner_FU1)*factor(time)*factor(Anxiety) + (1|ID) + CESD_10_FU1 + Age + BMI + Relationship_status + Education + Income_Level + Living_status +
+                                      Smoking_Status + Alcohol, Females_CESD)
+summary(AnxFemale_CESD_10_lmm_full)
+anova(AnxFemale_CESD_10_lmm_full)
+AnxFemale_CESD_10_lmm_full_2<-ref_grid(AnxFemale_CESD_10_lmm_full, rg.limit = 153600)
+lsmeans(AnxFemale_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety)|factor(time))
+contrast(lsmeans(AnxFemale_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety)|factor(time)), "pairwise", adj="none")
+confint(contrast(lsmeans(AnxFemale_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety)|factor(time)), "pairwise", adj="none"), parm, level = 0.95)        
+
+
+
+#Depression#
+#~~~~~~~~~~#
+describeBy(Males_CESD$CESD_10_FU1, Males_CESD$Depression)
+describeBy(Females_CESD$CESD_10_FU1, Females_CESD$Depression)
+describeBy(Males_CESD$CESD_10_FU1, list(Males_CESD$Depression, Males_CESD$Pet_Owner_FU1))
+describeBy(Females_CESD$CESD_10_FU1, list(Females_CESD$Depression, Females_CESD$Pet_Owner_FU1))
+
+#Males
+DepMales_CESD_10_lmm_full<-lmer(CESD_10~factor(Pet_Owner_FU1)*factor(time)*factor(Depression) + (1|ID) + CESD_10_FU1 + Age + BMI + Relationship_status + Education + Income_Level + Living_status +
+                                      Smoking_Status + Alcohol, Males_CESD)
+summary(DepMales_CESD_10_lmm_full)
+anova(DepMales_CESD_10_lmm_full)
+DepMales_CESD_10_lmm_full_2<-ref_grid(DepMales_CESD_10_lmm_full, rg.limit = 153600)
+lsmeans(DepMales_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression)|factor(time))
+contrast(lsmeans(DepMales_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression)|factor(time)), "pairwise", adj="none")
+confint(contrast(lsmeans(DepMales_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression)|factor(time)), "pairwise", adj="none"), parm, level = 0.95)        
+
+#Females
+DepFemales_CESD_10_lmm_full<-lmer(CESD_10~factor(Pet_Owner_FU1)*factor(time)*factor(Depression) + (1|ID) + CESD_10_FU1 + Age + BMI + Relationship_status + Education + Income_Level + Living_status +
+                                  Smoking_Status + Alcohol, Females_CESD)
+summary(DepFemales_CESD_10_lmm_full)
+anova(DepFemales_CESD_10_lmm_full)
+DepFemales_CESD_10_lmm_full_2<-ref_grid(DepFemales_CESD_10_lmm_full, rg.limit = 153600)
+lsmeans(DepFemales_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression)|factor(time))
+contrast(lsmeans(DepFemales_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression)|factor(time)), "pairwise", adj="none")
+confint(contrast(lsmeans(DepFemales_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression)|factor(time)), "pairwise", adj="none"), parm, level = 0.95)        
+
+
+#Mood Disorders#
+#~~~~~~~~~~~~~~#
+describeBy(Males_CESD$CESD_10_FU1, Males_CESD$Mood_Disorders)
+describeBy(Females_CESD$CESD_10_FU1, Females_CESD$Mood_Disorders)
+describeBy(Males_CESD$CESD_10_FU1, list(Males_CESD$Mood_Disorders, Males_CESD$Pet_Owner_FU1))
+describeBy(Females_CESD$CESD_10_FU1, list(Females_CESD$Mood_Disorders, Females_CESD$Pet_Owner_FU1))
+
+#Males
+MoodMales_CESD_10_lmm_full<-lmer(CESD_10~factor(Pet_Owner_FU1)*factor(time)*factor(Mood_Disorders) + (1|ID) + CESD_10_FU1 + Age + BMI + Relationship_status + Education + Income_Level + Living_status +
+                                       Smoking_Status + Alcohol, Males_CESD)
+summary(MoodMales_CESD_10_lmm_full)
+anova(MoodMales_CESD_10_lmm_full)
+MoodMales_CESD_10_lmm_full_2<-ref_grid(MoodMales_CESD_10_lmm_full, rg.limit = 153600)
+lsmeans(MoodMales_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders)|factor(time))
+contrast(lsmeans(MoodMales_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders)|factor(time)), "pairwise", adj="none")
+confint(contrast(lsmeans(MoodMales_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders)|factor(time)), "pairwise", adj="none"), parm, level = 0.95)        
+
+#Females
+MoodFemales_CESD_10_lmm_full<-lmer(CESD_10~factor(Pet_Owner_FU1)*factor(time)*factor(Mood_Disorders) + (1|ID) + CESD_10_FU1 + Age + BMI + Relationship_status + Education + Income_Level + Living_status +
+                                   Smoking_Status + Alcohol, Females_CESD)
+summary(MoodFemales_CESD_10_lmm_full)
+anova(MoodFemales_CESD_10_lmm_full)
+MoodFemales_CESD_10_lmm_full_2<-ref_grid(MoodFemales_CESD_10_lmm_full, rg.limit = 153600)
+lsmeans(MoodFemales_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders)|factor(time))
+contrast(lsmeans(MoodFemales_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders)|factor(time)), "pairwise", adj="none")
+confint(contrast(lsmeans(MoodFemales_CESD_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders)|factor(time)), "pairwise", adj="none"), parm, level = 0.95)        
+
+
+#______________________________________________________________________________#
+#11: Sensitivity Analysis #6: Sex differences in GAD score                     #
+#______________________________________________________________________________#
+Males_GAD_Baseline<-subset(COVID_Final_Baseline_GAD, Sex == "M")
+Females_GAD_Baseline<-subset(COVID_Final_Baseline_GAD, Sex == "F")
+
+######BASELINE#############
+
+#Anxiety Males
+Anx_Males_GAD7_lmm_full<-lm(GAD_7_Baseline~factor(Pet_Owner_FU1)*factor(Anxiety) + Age + BMI + Relationship_status + Education + Income_Level + Living_status +
+                        Smoking_Status + Alcohol, Males_GAD_Baseline)
+summary(Anx_Males_GAD7_lmm_full)
+anova(Anx_Males_GAD7_lmm_full)
+Anx_Males_GAD7_lmm_full_2<-ref_grid(Anx_Males_GAD7_lmm_full, rg.limit = 76800)
+lsmeans(Anx_Males_GAD7_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety))
+contrast(lsmeans(Anx_Males_GAD7_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety)), "pairwise", adj="none")
+confint(contrast(lsmeans(Anx_Males_GAD7_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety)), "pairwise", adj="none"), parm, level = 0.95)        
+
+#Anxiety Females
+Anx_Females_lmm_full<-lm(GAD_7_Baseline~factor(Pet_Owner_FU1)*factor(Anxiety) + Age + BMI + Relationship_status + Education + Income_Level + Living_status +
+                        Smoking_Status + Alcohol, Females_GAD_Baseline)
+summary(Anx_Females_lmm_full)
+anova(Anx_Females_lmm_full)
+Anx_Females_lmm_full_2<-ref_grid(Anx_Females_lmm_full, rg.limit = 76800)
+lsmeans(Anx_Females_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety))
+contrast(lsmeans(Anx_Females_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety)), "pairwise", adj="none")
+confint(contrast(lsmeans(Anx_Females_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety)), "pairwise", adj="none"), parm, level = 0.95)        
+
+
+#Depression Males
+Dep_Males_10_lmm_full<-lm(GAD_7_Baseline~factor(Pet_Owner_FU1)*factor(Depression) + Age + BMI + Relationship_status + Education + Income_Level + Living_status +
+                           Smoking_Status + Alcohol, Males_GAD_Baseline)
+summary(Dep_Males_10_lmm_full)
+anova(Dep_Males_10_lmm_full)
+Dep_Males_10_lmm_full_2<-ref_grid(Dep_Males_10_lmm_full, rg.limit = 76800)
+lsmeans(Dep_Males_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression))
+contrast(lsmeans(Dep_Males_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression)), "pairwise", adj="none")
+confint(contrast(lsmeans(Dep_Males_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression)), "pairwise", adj="none"), parm, level = 0.95)        
+
+#Depression Females
+Dep_Females_10_lmm_full<-lm(GAD_7_Baseline~factor(Pet_Owner_FU1)*factor(Depression) + Age + BMI + Relationship_status + Education + Income_Level + Living_status +
+                           Smoking_Status + Alcohol,Females_GAD_Baseline)
+summary(Dep_Females_10_lmm_full)
+anova(Dep_Females_10_lmm_full)
+Dep_Females_10_lmm_full_2<-ref_grid(Dep_Females_10_lmm_full, rg.limit = 76800)
+lsmeans(Dep_Females_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression))
+contrast(lsmeans(Dep_Females_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression)), "pairwise", adj="none")
+confint(contrast(lsmeans(Dep_Females_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression)), "pairwise", adj="none"), parm, level = 0.95)        
+
+
+#Mood Disorder Males
+Mood_Males_10_lmm_full<-lm(GAD_7_Baseline~factor(Pet_Owner_FU1)*factor(Mood_Disorders) + Age + BMI + Relationship_status + Education + Income_Level + Living_status +
+                            Smoking_Status + Alcohol, Males_GAD_Baseline)
+summary(Mood_Males_10_lmm_full)
+anova(Mood_Males_10_lmm_full)
+Mood_Males_10_lmm_full_2<-ref_grid(Mood_Males_10_lmm_full, rg.limit = 76800)
+lsmeans(Mood_Males_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders))
+contrast(lsmeans(Mood_Males_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders)), "pairwise", adj="none")
+confint(contrast(lsmeans(Mood_Males_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders)), "pairwise", adj="none"), parm, level = 0.95)  
+
+#Mood Disorder Females
+Mood_Females_10_lmm_full<-lm(GAD_7_Baseline~factor(Pet_Owner_FU1)*factor(Mood_Disorders) + Age + BMI + Relationship_status + Education + Income_Level + Living_status +
+                             Smoking_Status + Alcohol, Females_GAD_Baseline)
+summary(Mood_Females_10_lmm_full)
+anova(Mood_Females_10_lmm_full)
+Mood_Females_10_lmm_full_2<-ref_grid(Mood_Females_10_lmm_full, rg.limit = 76800)
+lsmeans(Mood_Females_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders))
+contrast(lsmeans(Mood_Females_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders)), "pairwise", adj="none")
+confint(contrast(lsmeans(Mood_Females_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders)), "pairwise", adj="none"), parm, level = 0.95)  
+
+######EXIT#############
+Males_GAD_Exit<-subset(COVID_Final_Exit_GAD, Sex == "M")
+Females_GAD_Exit<-subset(COVID_Final_Exit_GAD, Sex == "F")
+
+#Anxiety Males
+Anx_Males_GAD7_lmm_full<-lm(GAD_7_Exit~factor(Pet_Owner_FU1)*factor(Anxiety) + Age + BMI + Relationship_status + Education + Income_Level + Living_status +
+                              Smoking_Status + Alcohol, Males_GAD_Exit)
+summary(Anx_Males_GAD7_lmm_full)
+anova(Anx_Males_GAD7_lmm_full)
+Anx_Males_GAD7_lmm_full_2<-ref_grid(Anx_Males_GAD7_lmm_full, rg.limit = 76800)
+lsmeans(Anx_Males_GAD7_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety))
+contrast(lsmeans(Anx_Males_GAD7_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety)), "pairwise", adj="none")
+confint(contrast(lsmeans(Anx_Males_GAD7_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety)), "pairwise", adj="none"), parm, level = 0.95)        
+
+#Anxiety Females
+Anx_Females_lmm_full<-lm(GAD_7_Exit~factor(Pet_Owner_FU1)*factor(Anxiety) + Age + BMI + Relationship_status + Education + Income_Level + Living_status +
+                           Smoking_Status + Alcohol, Females_GAD_Exit)
+summary(Anx_Females_lmm_full)
+anova(Anx_Females_lmm_full)
+Anx_Females_lmm_full_2<-ref_grid(Anx_Females_lmm_full, rg.limit = 76800)
+lsmeans(Anx_Females_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety))
+contrast(lsmeans(Anx_Females_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety)), "pairwise", adj="none")
+confint(contrast(lsmeans(Anx_Females_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Anxiety)), "pairwise", adj="none"), parm, level = 0.95)        
+
+
+#Depression Males
+Dep_Males_10_lmm_full<-lm(GAD_7_Exit~factor(Pet_Owner_FU1)*factor(Depression) + Age + BMI + Relationship_status + Education + Income_Level + Living_status +
+                            Smoking_Status + Alcohol, Males_GAD_Exit)
+summary(Dep_Males_10_lmm_full)
+anova(Dep_Males_10_lmm_full)
+Dep_Males_10_lmm_full_2<-ref_grid(Dep_Males_10_lmm_full, rg.limit = 76800)
+lsmeans(Dep_Males_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression))
+contrast(lsmeans(Dep_Males_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression)), "pairwise", adj="none")
+confint(contrast(lsmeans(Dep_Males_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression)), "pairwise", adj="none"), parm, level = 0.95)        
+
+#Depression Females
+Dep_Females_10_lmm_full<-lm(GAD_7_Exit~factor(Pet_Owner_FU1)*factor(Depression) + Age + BMI + Relationship_status + Education + Income_Level + Living_status +
+                              Smoking_Status + Alcohol,Females_GAD_Exit)
+summary(Dep_Females_10_lmm_full)
+anova(Dep_Females_10_lmm_full)
+Dep_Females_10_lmm_full_2<-ref_grid(Dep_Females_10_lmm_full, rg.limit = 76800)
+lsmeans(Dep_Females_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression))
+contrast(lsmeans(Dep_Females_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression)), "pairwise", adj="none")
+confint(contrast(lsmeans(Dep_Females_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Depression)), "pairwise", adj="none"), parm, level = 0.95)        
+
+
+#Mood Disorder Males
+Mood_Males_10_lmm_full<-lm(GAD_7_Exit~factor(Pet_Owner_FU1)*factor(Mood_Disorders) + Age + BMI + Relationship_status + Education + Income_Level + Living_status +
+                             Smoking_Status + Alcohol, Males_GAD_Exit)
+summary(Mood_Males_10_lmm_full)
+anova(Mood_Males_10_lmm_full)
+Mood_Males_10_lmm_full_2<-ref_grid(Mood_Males_10_lmm_full, rg.limit = 76800)
+lsmeans(Mood_Males_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders))
+contrast(lsmeans(Mood_Males_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders)), "pairwise", adj="none")
+confint(contrast(lsmeans(Mood_Males_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders)), "pairwise", adj="none"), parm, level = 0.95)  
+
+Mood_Females_10_lmm_full<-lm(GAD_7_Exit~factor(Pet_Owner_FU1)*factor(Mood_Disorders) + Age + BMI + Relationship_status + Education + Income_Level + Living_status +
+                               Smoking_Status + Alcohol, Females_GAD_Exit)
+summary(Mood_Females_10_lmm_full)
+anova(Mood_Females_10_lmm_full)
+Mood_Females_10_lmm_full_2<-ref_grid(Mood_Females_10_lmm_full, rg.limit = 76800)
+lsmeans(Mood_Females_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders))
+contrast(lsmeans(Mood_Females_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders)), "pairwise", adj="none")
+confint(contrast(lsmeans(Mood_Females_10_lmm_full_2, ~factor(Pet_Owner_FU1)|factor(Mood_Disorders)), "pairwise", adj="none"), parm, level = 0.95)  
